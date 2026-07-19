@@ -1,10 +1,10 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, Auth, onAuthStateChanged, User } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
-import { getStorage, FirebaseStorage } from 'firebase/storage';
-import { getAnalytics } from 'firebase/analytics';
+import { initializeApp } from "firebase/app";
+import { getAuth, Auth } from "firebase/auth";
+import { getFirestore, Firestore } from "firebase/firestore";
+import { getStorage, FirebaseStorage } from "firebase/storage";
+import { getAnalytics } from "firebase/analytics";
 
-// Firebase configuration
+// Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCEjMAeZAtgRyhGqPIqEd5Rcy4KJH4IYog",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "skill-chain-india.firebaseapp.com",
@@ -16,27 +16,23 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const firebaseApp = initializeApp(firebaseConfig);
+const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase services
-export const auth: Auth = getAuth(firebaseApp);
-export const db: Firestore = getFirestore(firebaseApp);
-export const storage: FirebaseStorage = getStorage(firebaseApp);
+// Export Firebase services
+export const auth: Auth = getAuth(app);
+export const db: Firestore = getFirestore(app);
+export const storage: FirebaseStorage = getStorage(app);
 
 // Initialize Analytics (optional)
 try {
-  const analytics = getAnalytics(firebaseApp);
-  console.log('Firebase Analytics initialized');
+  const analytics = getAnalytics(app);
+  console.log('✅ Firebase Analytics initialized');
 } catch (err) {
-  console.log('Firebase Analytics not available in this environment');
+  console.log('ℹ️ Firebase Analytics not available in this environment');
 }
 
-// Auth state listener
-export const setupAuthListener = (callback: (user: User | null) => void) => {
-  return onAuthStateChanged(auth, (user) => {
-    callback(user);
-  });
-};
+// Log Firebase initialization
+console.log('✅ Firebase initialized successfully');
+console.log('Project:', firebaseConfig.projectId);
 
-// Export app for other uses
-export default firebaseApp;
+export default app;
