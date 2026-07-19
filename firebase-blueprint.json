@@ -1,0 +1,184 @@
+{
+  "entities": {
+    "Student": {
+      "title": "Student Profile",
+      "description": "Student builder profiles on the Web3 platform",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "avatar": { "type": "string" },
+        "skills": { "type": "string" },
+        "reputation": { "type": "integer" },
+        "innovationPoints": { "type": "integer" },
+        "completedProjectsCount": { "type": "integer" },
+        "rating": { "type": "number" },
+        "walletAddress": { "type": "string" }
+      },
+      "required": ["id", "name", "reputation"]
+    },
+    "Company": {
+      "title": "Company Profile",
+      "description": "Partner profiles offering Web3 gig works",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "logo": { "type": "string" },
+        "industry": { "type": "string" },
+        "about": { "type": "string" },
+        "rating": { "type": "number" },
+        "studentsHired": { "type": "integer" },
+        "projectsPosted": { "type": "integer" },
+        "isVerified": { "type": "boolean" }
+      },
+      "required": ["id", "name"]
+    },
+    "Opportunity": {
+      "title": "Opportunity",
+      "description": "Gigs, projects and internship opportunities offered by companies",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "responsibilities": { "type": "string" },
+        "deliverables": { "type": "string" },
+        "budget": { "type": "integer" },
+        "paymentMethod": { "type": "string", "enum": ["Crypto", "Stripe", "Razorpay"] },
+        "duration": { "type": "string" },
+        "deadline": { "type": "string" },
+        "skillsRequired": { "type": "string" },
+        "difficulty": { "type": "string", "enum": ["Beginner", "Intermediate", "Expert"] },
+        "location": { "type": "string" },
+        "companyId": { "type": "string" },
+        "companyName": { "type": "string" },
+        "companyLogo": { "type": "string" },
+        "companyRating": { "type": "number" },
+        "applicantsCount": { "type": "integer" },
+        "status": { "type": "string", "enum": ["open", "ongoing", "completed"] },
+        "paymentStatus": { "type": "string", "enum": ["pending", "escrowed", "released"] }
+      },
+      "required": ["id", "title", "companyId", "budget", "status"]
+    },
+    "Application": {
+      "title": "Application",
+      "description": "Applications submitted by students for opportunities",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "opportunityId": { "type": "string" },
+        "opportunityTitle": { "type": "string" },
+        "companyName": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentAvatar": { "type": "string" },
+        "studentSkills": { "type": "string" },
+        "studentReputation": { "type": "integer" },
+        "status": { "type": "string", "enum": ["applied", "shortlisted", "hired", "rejected", "completed"] },
+        "appliedAt": { "type": "string" },
+        "submissionLink": { "type": "string" },
+        "submissionText": { "type": "string" }
+      },
+      "required": ["id", "opportunityId", "studentId", "status"]
+    },
+    "InnovationIdea": {
+      "title": "InnovationIdea",
+      "description": "Ideas shared in the Innovation Hub",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "creatorAvatar": { "type": "string" },
+        "creatorSkills": { "type": "string" },
+        "category": { "type": "string" },
+        "votesCount": { "type": "integer" },
+        "votedUserIds": { "type": "array" },
+        "coFoundersNeeded": { "type": "boolean" },
+        "coFoundersJoined": { "type": "array" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "creatorId", "votesCount"]
+    },
+    "AppNotification": {
+      "title": "AppNotification",
+      "description": "Platform notifications for user activities",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userRole": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["success", "info", "warning"] },
+        "createdAt": { "type": "string" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["id", "userId", "title", "message", "read"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "Platform moderation compliance reports",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "reporterId": { "type": "string" },
+        "reporterName": { "type": "string" },
+        "reportedId": { "type": "string" },
+        "reportedTitle": { "type": "string" },
+        "reason": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "resolved"] }
+      },
+      "required": ["id", "reporterId", "reportedId", "reason", "status"]
+    },
+    "Setting": {
+      "title": "System Setting",
+      "description": "System security and metadata configurations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "dashboardPassword": { "type": "string" }
+      },
+      "required": ["id", "dashboardPassword"]
+    }
+  },
+  "firestore": {
+    "/settings/{settingId}": {
+      "schema": "Setting",
+      "description": "System security and metadata settings"
+    },
+    "/students/{studentId}": {
+      "schema": "Student",
+      "description": "Student profiles collection"
+    },
+    "/companies/{companyId}": {
+      "schema": "Company",
+      "description": "Company profiles collection"
+    },
+    "/opportunities/{opportunityId}": {
+      "schema": "Opportunity",
+      "description": "Listed Web3 gigs collection"
+    },
+    "/applications/{applicationId}": {
+      "schema": "Application",
+      "description": "Gigs job applications collection"
+    },
+    "/ideas/{ideaId}": {
+      "schema": "InnovationIdea",
+      "description": "Innovation ideas shared in ecosystem"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "AppNotification",
+      "description": "Activity alerts and logging"
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "Compliance reports logged for moderation"
+    }
+  }
+}

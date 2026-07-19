@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Skill Chain India",
+  "description": "A fully responsive Web3-powered student internship, freelancing, and micro-project marketplace with blockchain identity verification, community voting, and reputational tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

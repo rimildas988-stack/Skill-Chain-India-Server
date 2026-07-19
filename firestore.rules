@@ -1,0 +1,181 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default-deny catch-all safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper: Auth Check
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper: Email Verification
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
+    // Helper: Bootstrapped Admin check
+    function isAdmin() {
+      return isSignedIn() && isEmailVerified() && request.auth.token.email == "websitebuilder564@gmail.com";
+    }
+
+    // Helper: Document ID security guard
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Helper: Short Hand for resource states
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // ----------------------------------------------------
+    // Collection: Students
+    // ----------------------------------------------------
+    match /students/{studentId} {
+      function isValidStudent(data) {
+        return data.keys().hasAll(['id', 'name'])
+          && data.id is string
+          && data.name is string;
+      }
+
+      allow read: if true;
+      allow create: if (studentId.startsWith('phone_') && isValidId(studentId) && isValidStudent(incoming())) || (isSignedIn() && isValidId(studentId) && isValidStudent(incoming()) && (request.auth.uid == studentId || isAdmin()));
+      allow update: if (studentId.startsWith('phone_') && isValidId(studentId) && isValidStudent(incoming())) || (isSignedIn() && isValidId(studentId) && isValidStudent(incoming()) && (request.auth.uid == studentId || isAdmin()));
+      allow delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // Collection: Companies
+    // ----------------------------------------------------
+    match /companies/{companyId} {
+      function isValidCompany(data) {
+        return data.keys().hasAll(['id', 'name'])
+          && data.id is string
+          && data.name is string;
+      }
+
+      allow read: if true;
+      allow create: if (companyId.startsWith('phone_') && isValidId(companyId) && isValidCompany(incoming())) || (isSignedIn() && isValidId(companyId) && isValidCompany(incoming()) && (request.auth.uid == companyId || isAdmin()));
+      allow update: if (companyId.startsWith('phone_') && isValidId(companyId) && isValidCompany(incoming())) || (isSignedIn() && isValidId(companyId) && isValidCompany(incoming()) && (request.auth.uid == companyId || isAdmin()));
+      allow delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // Collection: Opportunities
+    // ----------------------------------------------------
+    match /opportunities/{opportunityId} {
+      function isValidOpportunity(data) {
+        return data.keys().hasAll(['id', 'title', 'companyId'])
+          && data.id is string
+          && data.title is string
+          && data.companyId is string;
+      }
+
+      allow read: if true;
+      allow create: if (incoming().companyId.startsWith('phone_') && isValidId(opportunityId) && isValidOpportunity(incoming())) || (isSignedIn() && isValidId(opportunityId) && isValidOpportunity(incoming()) && (request.auth.uid == incoming().companyId || isAdmin()));
+      allow update: if (isSignedIn() && isValidId(opportunityId) && isValidOpportunity(incoming()) && (
+        request.auth.uid == existing().companyId || 
+        request.auth.uid == incoming().companyId || 
+        isAdmin() ||
+        (incoming().diff(existing()).affectedKeys().hasOnly(['applicantsCount']))
+      ));
+      allow delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // Collection: Applications
+    // ----------------------------------------------------
+    match /applications/{applicationId} {
+      function isValidApplication(data) {
+        return data.keys().hasAll(['id', 'opportunityId', 'studentId', 'status'])
+          && data.id is string
+          && data.opportunityId is string
+          && data.studentId is string
+          && data.status is string;
+      }
+
+      allow read: if true;
+      allow create: if (incoming().studentId.startsWith('phone_') && isValidId(applicationId) && isValidApplication(incoming())) || (isSignedIn() && isValidId(applicationId) && isValidApplication(incoming()) && (request.auth.uid == incoming().studentId || isAdmin()));
+      allow update: if (existing().studentId.startsWith('phone_') && isValidId(applicationId) && isValidApplication(incoming())) || (isSignedIn() && isValidId(applicationId) && isValidApplication(incoming()) && (
+        request.auth.uid == existing().studentId || 
+        isAdmin() ||
+        // Check if user is the company owner of the related opportunity
+        request.auth.uid == get(/databases/$(database)/documents/opportunities/$(existing().opportunityId)).data.companyId
+      ));
+      allow delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // Collection: Ideas
+    // ----------------------------------------------------
+    match /ideas/{ideaId} {
+      function isValidIdea(data) {
+        return data.keys().hasAll(['id', 'title', 'creatorId'])
+          && data.id is string
+          && data.title is string
+          && data.creatorId is string;
+      }
+
+      allow read: if true;
+      allow create: if (incoming().creatorId.startsWith('phone_') && isValidId(ideaId) && isValidIdea(incoming())) || (isSignedIn() && isValidId(ideaId) && isValidIdea(incoming()) && (request.auth.uid == incoming().creatorId || isAdmin()));
+      allow update: if (existing().creatorId.startsWith('phone_') && isValidId(ideaId) && isValidIdea(incoming())) || (isSignedIn() && isValidId(ideaId) && isValidIdea(incoming()));
+      allow delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // Collection: Notifications
+    // ----------------------------------------------------
+    match /notifications/{notificationId} {
+      function isValidNotification(data) {
+        return data.keys().hasAll(['id', 'userId', 'title'])
+          && data.id is string
+          && data.userId is string
+          && data.title is string;
+      }
+
+      allow read: if resource.data.userId.startsWith('phone_') || (isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.userId == 'admin' && isAdmin())) || (request.auth == null && resource.data.userId.startsWith('phone_'));
+      allow create: if incoming().userId.startsWith('phone_') || (isSignedIn() && isValidId(notificationId) && isValidNotification(incoming())) || (request.auth == null && isValidId(notificationId) && incoming().userId.startsWith('phone_') && isValidNotification(incoming()));
+      allow update: if existing().userId.startsWith('phone_') || (isSignedIn() && isValidId(notificationId) && isValidNotification(incoming()) && (existing().userId == request.auth.uid || isAdmin())) || (request.auth == null && isValidId(notificationId) && existing().userId.startsWith('phone_') && incoming().userId == existing().userId && isValidNotification(incoming()));
+      allow delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // Collection: Reports
+    // ----------------------------------------------------
+    match /reports/{reportId} {
+      function isValidReport(data) {
+        return data.keys().hasAll(['id', 'reporterId', 'reportedId', 'reason'])
+          && data.id is string
+          && data.reporterId is string
+          && data.reportedId is string;
+      }
+
+      allow read: if isAdmin();
+      allow create: if incoming().reporterId.startsWith('phone_') || (isSignedIn() && isValidId(reportId) && isValidReport(incoming()) && (request.auth.uid == incoming().reporterId || isAdmin())) || (request.auth == null && isValidId(reportId) && incoming().reporterId.startsWith('phone_') && isValidReport(incoming()));
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ----------------------------------------------------
+    // Collection: Settings
+    // ----------------------------------------------------
+    match /settings/{settingId} {
+      function isValidSetting(data) {
+        return data.keys().hasAll(['id', 'dashboardPassword'])
+          && data.id is string
+          && data.dashboardPassword is string;
+      }
+
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}
