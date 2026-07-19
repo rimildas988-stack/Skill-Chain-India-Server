@@ -1041,26 +1041,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Load/Seed dashboard security configuration from Firestore
   useEffect(() => {
+    if (!currentUser) return;
+
     const loadDashboardSecurity = async () => {
       try {
         const docRef = doc(db, 'settings', 'security');
         const snap = await getDoc(docRef);
+        const isAdmin = currentUser?.email === 'websitebuilder564@gmail.com' || currentRole === 'admin';
         if (snap.exists()) {
           const data = snap.data();
           if (data && data.dashboardPassword) {
             if (data.dashboardPassword !== 'skillchain@14qpe*') {
-              // Automatically correct/update the password to the exact one requested by the user
-              await setDoc(docRef, {
-                id: 'security',
-                dashboardPassword: 'skillchain@14qpe*'
-              });
+              if (isAdmin) {
+                // Automatically correct/update the password to the exact one requested by the user
+                await setDoc(docRef, {
+                  id: 'security',
+                  dashboardPassword: 'skillchain@14qpe*'
+                });
+              }
               setDbPassword('skillchain@14qpe*');
             } else {
               setDbPassword(data.dashboardPassword);
             }
           }
-        } else {
-          // Setting doesn't exist yet, seed it specifically
+        } else if (isAdmin) {
+          // Setting doesn't exist yet, seed it specifically (only if admin)
           await setDoc(docRef, {
             id: 'security',
             dashboardPassword: 'skillchain@14qpe*'
@@ -1071,7 +1076,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
     loadDashboardSecurity();
-  }, [currentUser]);
+  }, [currentUser, currentRole]);
 
   const verifyDashboardPassword = async (pass: string): Promise<boolean> => {
     let correctPass = dbPassword;
