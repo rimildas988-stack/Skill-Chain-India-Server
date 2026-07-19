@@ -3,6 +3,9 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
 import dotenv from "dotenv";
+import studentRoutes from "./src/api/students";
+import opportunityRoutes from "./src/api/opportunities";
+import agreementRoutes from "./src/api/agreements";
 
 dotenv.config();
 
@@ -20,6 +23,11 @@ const ai = new GoogleGenAI({
     }
   }
 });
+
+// Firebase API Routes
+app.use('/api', studentRoutes);
+app.use('/api', opportunityRoutes);
+app.use('/api', agreementRoutes);
 
 // API: AI Matching & Gig Suitability Evaluation
 app.post("/api/ai/match", async (req, res) => {
@@ -95,7 +103,7 @@ Provide the response in structured JSON with the following schema:
     else if (score >= 75) verdict = "Recommended";
     else if (score < 65) verdict = "Needs Upskilling";
 
-    const suitabilityAnalysis = `Based on our advanced matching analysis, ${student.name} is a ${verdict.toLowerCase()} for the ${opportunity.title} gig at ${opportunity.companyName}. With on-chain verified skills in ${studentSkills.slice(0, 3).join(', ')} and a reputation score of ${student.reputation || 10} points, they demonstrate the foundational technical capability and project-delivery reliability needed for this ${opportunity.category} role.`;
+    const suitabilityAnalysis = `Based on our advanced matching analysis, ${student.name} is a ${verdict.toLowerCase()} for the ${opportunity.title} gig at ${opportunity.companyName}. With on-chain verifiable experience and proven competency, this match aligns perfectly with our premium talent standards.`;
 
     const smartTips = [
       `Emphasize your practical, verified experience in ${studentSkills[0] || 'Web3 development'} when discussing requirements with ${opportunity.companyName}.`,
@@ -105,9 +113,11 @@ Provide the response in structured JSON with the following schema:
 
     const draftProposal = `Dear Hiring Team at ${opportunity.companyName},
 
-I am highly interested in applying for the ${opportunity.title} opportunity on Skill Chain India. As an active builder, I have honed structured expertise in ${studentSkills.slice(0, 4).join(', ')}, making me well-suited for your requirements.
+I am highly interested in applying for the ${opportunity.title} opportunity on Skill Chain India. As an active builder, I have honed structured expertise in ${studentSkills.slice(0, 4).join(', ')}, and I believe my profile is an exceptional match for your requirements.
 
-I have established a verified on-chain profile with a reputation score of ${student.reputation || 10} points and a current rating of ${student.rating || '5.0'}/5.0. This track record reflects my commitment to delivering premium, high-quality milestones on schedule. I am fully comfortable working with your budget of ${opportunity.budget} using ${opportunity.paymentMethod} escrow protection, and look forward to building a prestigious partnership.
+I have established a verified on-chain profile with a reputation score of ${student.reputation || 10} points and a current rating of ${student.rating || '5.0'}/5.0. This track record reflects my commitment to quality and professional excellence.
+
+I look forward to discussing how I can contribute to your team's success.
 
 Sincerely,
 ${student.name}`;
@@ -172,7 +182,7 @@ Provide structured JSON with the following schema:
     res.json({
       agreementTitle: "Web3 Escrow Smart Agreement",
       clauses: [
-        `Escrow Initialization: Full funds of ${budget || '500 USDC'} must be fully locked in the Skill Chain India decentralized Escrow Smart Contract before the freelancer (${studentName}) initiates active code development.`,
+        `Escrow Initialization: Full funds of ${budget || '500 USDC'} must be fully locked in the Skill Chain India decentralized Escrow Smart Contract before the freelancer (${studentName}) initiates work.`,
         `On-Chain Milestone Gates: Contract code and milestone verification parameters will govern transparent releases to the freelancer's wallet address.`,
         `Deliverable Review Buffer: The Recruiter (${companyName}) has a strictly bounded 72-hour review period post-submission to verify requirements before funds release.`,
         `Decentralized Arbitration: Any deadlock, dispute, or code audit issue will be routed to the Skill Chain India developer arbitration guild for final voting.`
@@ -212,7 +222,7 @@ app.post("/api/ai/chat", async (req, res) => {
     }));
 
     const systemInstruction = `You are "Drago", the prestigious, stylish, and highly intelligent Web3 Golden Chatbot and Career Counselor for "Skill Chain India".
-Your personality is elite, innovative, encouraging, and majestic. You speak with a polished, luxury-tinted tone, occasionally referencing 'golden milestones', 'on-chain triumph', and 'reputational prestige'. 
+Your personality is elite, innovative, encouraging, and majestic. You speak with a polished, luxury-tinted tone, occasionally referencing 'golden milestones', 'on-chain triumph', and 'reputation gates'.
 You help students build high-value skill portfolios, navigate Web3 internships, maximize their gig earnings, and write winning pitches.
 
 Keep your responses stylish, highly practical, and engaging.
@@ -254,9 +264,9 @@ Would you like me to help you draft a golden, persuasive bio to add to your prof
     } else if (query.includes("gig") || query.includes("job") || query.includes("opportunity") || query.includes("apply")) {
       responseText = `Finding the perfect golden milestone is simple when your reputation is on-chain! 
 
-Browse the Marketplace, filter for opportunities that match your expertise in ${studentContext?.skills?.[0] || 'Solidity'}, and use my **AI Matching Suite** to analyze your suitability. Once ready, click **Generate Smart Contract Agreement** to seal the deal with secure, locked escrow!`;
+Browse the Marketplace, filter for opportunities that match your expertise in ${studentContext?.skills?.[0] || 'Solidity'}, and use my **AI Matching Suite** to analyze your suitability. Once you find a fit, I can help draft a persuasive proposal!`;
     } else if (query.includes("hello") || query.includes("hi") || query.includes("hey") || query.includes("drago")) {
-      responseText = `Greetings, noble builder! I am **Drago**, your prestigious Web3 Career Counselor. I am here to guide you toward golden on-chain triumphs, prestigious milestones, and luxury-tier freelancing. 
+      responseText = `Greetings, noble builder! I am **Drago**, your prestigious Web3 Career Counselor. I am here to guide you toward golden on-chain triumphs, prestigious milestones, and luxury-tier opportunities on Skill Chain India.
 
 How may I help you elevate your professional legacy on Skill Chain India today?`;
     } else {
