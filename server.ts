@@ -1,3 +1,4 @@
+import cors from 'cors';
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
@@ -12,6 +13,20 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// CORS Configuration for GitHub Pages
+const corsOptions = {
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:5173',  // Vite dev server
+    'https://rimildas988-stack.github.io',  // GitHub Pages
+    process.env.FRONTEND_URL  // Production frontend URL
+  ].filter(Boolean),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Initialize Gemini Client securely server-side
@@ -28,6 +43,11 @@ const ai = new GoogleGenAI({
 app.use('/api', studentRoutes);
 app.use('/api', opportunityRoutes);
 app.use('/api', agreementRoutes);
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Server is running' });
+});
 
 // API: AI Matching & Gig Suitability Evaluation
 app.post("/api/ai/match", async (req, res) => {
@@ -237,7 +257,6 @@ ${studentContext ? `Currently speaking to student: ${JSON.stringify(studentConte
       config.thinkingConfig = {
         thinkingLevel: ThinkingLevel.HIGH,
       };
-      // Do not set maxOutputTokens, as per instructions
     }
 
     const response = await ai.models.generateContent({
@@ -336,7 +355,6 @@ app.get("/api/ai/news", async (req, res) => {
     res.json(parsed);
   } catch (err: any) {
     console.warn("News Grounding Generator Error: using local fallback. Error detail:", err.message || err);
-    // Return custom curated, thematic news list
     const fallbacks: Record<string, any[]> = {
       all: [
         {
@@ -346,78 +364,11 @@ app.get("/api/ai/news", async (req, res) => {
           summary: "A major update to Skill Chain India enables gas-efficient escrow smart contracts deployed directly on Polygon zkEVM, slashing student platform fees by 80%.",
           url: "https://polygon.technology",
           relevance: "Directly powers decentralized talent micro-agreements with enhanced trust."
-        },
-        {
-          title: "Ethereum Developer Conclave 2026 Bangalore Welcomes 10k Builders",
-          source: "TechInAsia",
-          date: "July 02, 2026",
-          summary: "Bangalore hosts India's largest blockchain hackathon of 2026, showcasing decentralized identity solutions and high-performance Web3 freelancing tools built by students.",
-          url: "https://ethereum.org",
-          relevance: "Highlights the booming builder community in India's leading tech hub."
-        },
-        {
-          title: "ERC-7521 Co-Sign Escrow Standards Gain Mainstream Adoption",
-          source: "Etherscan Blog",
-          date: "June 28, 2026",
-          summary: "The adoption of account abstraction (ERC-4337 and ERC-7521) for freelance gig escrows has surged, ensuring zero-gas onboarding for student developers.",
-          url: "https://eips.ethereum.org",
-          relevance: "Standardizes secure milestone releases without complex private key operations."
         }
       ],
-      freelance: [
-        {
-          title: "Decentralized Freelance Marketplaces Witness 45% Year-Over-Year Growth",
-          source: "Web3Career Report",
-          date: "July 12, 2026",
-          summary: "A global study reveals blockchain-mediated developer agreements have surged, with students in emerging markets securing high-value USDC milestones.",
-          url: "https://web3.career",
-          relevance: "Validates the rise of escrow-protected project delivery models."
-        },
-        {
-          title: "The Rise of On-Chain Proof-of-Skill Passes",
-          source: "Decentralized Education Review",
-          date: "June 20, 2026",
-          summary: "Companies are shifting away from traditional resumes to on-chain credentials. Verified hackathon wins and smart contract deployments are now the prime metrics for recruitment.",
-          url: "https://github.com",
-          relevance: "Reinforces Skill Chain India's reputation and SkillPass architecture."
-        }
-      ],
-      india: [
-        {
-          title: "India's Ministry of Electronics (MeitY) Announces National Blockchain Framework",
-          source: "Economic Times",
-          date: "July 08, 2026",
-          summary: "India launches an upgraded national framework to support blockchain application scaling across governance, academic credentialing, and smart contract verification.",
-          url: "https://meity.gov.in",
-          relevance: "Boosts official support and institutional legitimacy for Web3 developers in India."
-        },
-        {
-          title: "IIT Madras and Skill Chain Partner for Academic Verification",
-          source: "NDTV Education",
-          date: "June 15, 2026",
-          summary: "A pioneering pilot program connects academic achievements directly to on-chain reputation logs, enabling seamless verification of technical courses.",
-          url: "https://iitm.ac.in",
-          relevance: "Pioneers verifiable academic credentials in mainstream Indian universities."
-        }
-      ],
-      "smart-contracts": [
-        {
-          title: "Solidity 0.8.28 Released with Enhanced Static Analysis Checks",
-          source: "Solidity Lang Blog",
-          date: "July 01, 2026",
-          summary: "The Ethereum Foundation releases compiler updates that enforce stricter mathematical overflow checks and optimize gas costs for deep escrow state changes.",
-          url: "https://soliditylang.org",
-          relevance: "Improves smart contract safety and reduces deployment overhead."
-        },
-        {
-          title: "Multi-Signature Escrow Patterns Show Zero Exploits in H1 2026",
-          source: "CertiK Security Index",
-          date: "June 25, 2026",
-          summary: "Audit results verify that structured multisig escrows remain the safest mechanism for locking gig payments, with a clean track record throughout the year.",
-          url: "https://certik.com",
-          relevance: "Supports our strict recommendation to only start work after escrow funding is locked."
-        }
-      ]
+      freelance: [],
+      india: [],
+      "smart-contracts": []
     };
 
     const selectedList = fallbacks[category] || fallbacks.all;
@@ -425,7 +376,7 @@ app.get("/api/ai/news", async (req, res) => {
   }
 });
 
-// Vite middleware setup for assets and SPA router
+// Vite middleware setup for assets and SPA router (only in development)
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
