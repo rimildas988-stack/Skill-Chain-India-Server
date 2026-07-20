@@ -12,6 +12,8 @@ import { NewsHub } from './components/NewsHub';
 import { DashboardLockScreen } from './components/DashboardLockScreen';
 import { PhoneLogin } from './components/PhoneLogin';
 import { ProfileModal } from './components/ProfileModal';
+import { PremiumBackground } from './components/PremiumBackground';
+import { AuraSynthConsole } from './components/AuraSynthConsole';
 import { 
   Shield, 
   Menu, 
@@ -30,7 +32,8 @@ import {
   Mail,
   Newspaper,
   Lock,
-  Unlock
+  Unlock,
+  Wallet
 } from 'lucide-react';
 
 type ViewState = 'home' | 'marketplace' | 'innovation-hub' | 'dashboard' | 'skillpass' | 'gmail' | 'news' | 'login';
@@ -44,6 +47,7 @@ const AppContent: React.FC = () => {
     walletConnected, 
     walletAddress,
     connectWallet,
+    disconnectWallet,
     currentUser,
     signInWithGoogle,
     signOutUser,
@@ -98,9 +102,8 @@ const AppContent: React.FC = () => {
         </div>
       )}
       
-      {/* Background Atmosphere */}
-      <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-amber-950/20 rounded-full blur-[120px] pointer-events-none z-0"></div>
-      <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-yellow-950/15 rounded-full blur-[100px] pointer-events-none z-0"></div>
+      {/* Expensive Interactive Luxury Background */}
+      <PremiumBackground />
 
       {/* GLOBAL SAAS NAVIGATION BAR */}
       <header className="sticky top-0 z-40 bg-[#0c0905]/70 backdrop-blur-md border-b border-[#e6ca65]/10 px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between">
@@ -161,6 +164,11 @@ const AppContent: React.FC = () => {
         {/* Action Controls & Role Selectors */}
         <div className="flex items-center gap-4 z-10">
           
+          {/* Expensive Classical Focal Resonance Synth */}
+          <div className="hidden lg:block">
+            <AuraSynthConsole />
+          </div>
+
           {/* Notifications Icon with Badge */}
           <button 
             onClick={() => setCurrentView('dashboard')}
@@ -211,6 +219,32 @@ const AppContent: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Real Web3 Wallet Connect Integration */}
+          {walletConnected ? (
+            <button
+              onClick={() => disconnectWallet()}
+              className="bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/30 px-3 py-1.5 rounded-xl text-xs font-mono text-emerald-300 flex items-center gap-1.5 transition cursor-pointer select-none animate-in fade-in zoom-in duration-200"
+              title={`Wallet connected: ${walletAddress}. Click to disconnect.`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse"></span>
+              <span>{walletAddress.substring(0, 6)}...{walletAddress.substring(walletAddress.length - 4)}</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                connectWallet().catch(err => {
+                  console.error(err);
+                });
+              }}
+              className="bg-[#120e07] hover:bg-[#1a140b] border border-[#e6ca65]/35 hover:border-amber-400/60 px-3 py-1.5 rounded-xl text-xs font-semibold text-amber-100 flex items-center gap-1.5 transition cursor-pointer select-none animate-in fade-in zoom-in duration-200"
+              title="Connect Web3 MetaMask / Browser Wallet"
+            >
+              <Wallet className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline font-mono">Connect Wallet</span>
+              <span className="sm:hidden font-mono">Connect</span>
+            </button>
+          )}
 
           {/* Custom Web3 Auth / Phone Integration Widget */}
           {loadingAuth ? (

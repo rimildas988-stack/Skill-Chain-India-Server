@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { BrowserProvider } from 'ethers';
 import { 
   Student, 
   Company, 
@@ -309,20 +310,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Action Handlers
   const connectWallet = async (address?: string) => {
-    const mockAddr = address || '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
-    setWalletConnected(true);
-    setWalletAddress(mockAddr);
-    
-    if (currentStudent) {
-      setStudents(prev => prev.map(s => s.id === currentStudent.id ? { ...s, walletAddress: mockAddr } : s));
+    // If address is provided directly (e.g. mock bypass or initial load from profile), we can use it.
+    if (address) {
+      setWalletConnected(true);
+      setWalletAddress(address);
+      if (currentStudent) {
+        setStudents(prev => prev.map(s => s.id === currentStudent.id ? { ...s, walletAddress: address } : s));
+      }
+      return;
+    }
+
+    if (typeof (window as any).ethereum === 'undefined') {
+      const errorMsg = 'MetaMask or compatible Web3 provider not found. Please install MetaMask to connect a real Web3 wallet!';
+      if (currentStudent) {
+        await addNotification(
+          currentStudent.id,
+          'student',
+          'Wallet Connection Failed',
+          errorMsg,
+          'warning'
+        );
+      }
+      throw new Error(errorMsg);
+    }
+
+    try {
+      const provider = new BrowserProvider((window as any).ethereum);
+      // Request accounts
+      const accounts = await provider.send("eth_requestAccounts", []);
+      if (!accounts || accounts.length === 0) {
+        throw new Error("No accounts returned from provider.");
+      }
+      const realAddr = accounts[0];
+      setWalletConnected(true);
+      setWalletAddress(realAddr);
       
-      await addNotification(
-        currentStudent.id,
-        'student',
-        'Wallet Connected',
-        `MetaMask wallet connected successfully at ${mockAddr.substring(0, 6)}...${mockAddr.substring(38)} on Polygon.`,
-        'success'
-      );
+      if (currentStudent) {
+        setStudents(prev => prev.map(s => s.id === currentStudent.id ? { ...s, walletAddress: realAddr } : s));
+        
+        await addNotification(
+          currentStudent.id,
+          'student',
+          'Wallet Connected',
+          `MetaMask wallet connected successfully at ${realAddr.substring(0, 6)}...${realAddr.substring(realAddr.length - 4)} on Ethereum network.`,
+          'success'
+        );
+      }
+    } catch (err: any) {
+      const errorMsg = err.message || 'An error occurred during wallet connection.';
+      if (currentStudent) {
+        await addNotification(
+          currentStudent.id,
+          'student',
+          'Wallet Connection Error',
+          errorMsg,
+          'warning'
+        );
+      }
+      throw err;
     }
   };
 

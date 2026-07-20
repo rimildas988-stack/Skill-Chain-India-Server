@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { ReputationProgress } from './ReputationProgress';
+import { SovereignLedgerTicker } from './SovereignLedgerTicker';
 import { 
   Shield, 
   Award, 
@@ -847,6 +848,11 @@ CREATE POLICY "Allow anonymous read/write access" ON skill_chain_sync FOR ALL US
                     </div>
 
                   </div>
+                </div>
+
+                {/* Live ledger consensus monitoring deck */}
+                <div className="md:col-span-2 pt-2 animate-in slide-in-from-bottom duration-500">
+                  <SovereignLedgerTicker />
                 </div>
               </div>
             )}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { ArrowRight, Sparkles, Shield, Award, Users, Briefcase, DollarSign, ArrowUpRight, HelpCircle, ChevronDown, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { SovereignLedgerTicker } from './SovereignLedgerTicker';
 
 interface HeroProps {
   onNavigate: (view: 'marketplace' | 'student-dashboard' | 'company-dashboard' | 'innovation-hub') => void;
@@ -254,6 +255,22 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate, onSelectStudent }) => {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Sovereign Consensus Ledger Ticker Section */}
+      <section className="py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto" id="live-ledger-section">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="text-center space-y-2">
+            <h3 className="text-2xl font-bold tracking-tight text-white flex items-center justify-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shadow-[0_0_10px_rgba(230,202,101,0.7)]"></span>
+              Live Cryptographic Credentials Stream
+            </h3>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              Real-time audit of talent milestones, sovereign digital pass hashes, and escrow settlements validated across India.
+            </p>
+          </div>
+          <SovereignLedgerTicker />
         </div>
       </section>
 
