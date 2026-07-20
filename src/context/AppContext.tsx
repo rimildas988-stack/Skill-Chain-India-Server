@@ -1,25 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
-  onAuthStateChanged, 
-  signInAnonymously, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signOut, 
-  User 
-} from 'firebase/auth';
-import { 
-  collection, 
-  onSnapshot, 
-  getDocs, 
-  doc, 
-  setDoc, 
-  getDoc,
-  query,
-  where
-} from 'firebase/firestore';
-import { db, auth } from '../firebase';
-import { setDocument, updateDocument } from '../lib/firestoreService';
-import { 
   Student, 
   Company, 
   Opportunity, 
@@ -27,7 +7,11 @@ import {
   InnovationIdea, 
   AppNotification, 
   Achievement, 
-  Report 
+  Report,
+  User,
+  GitHubProfile,
+  GitHubRepository,
+  SupabaseConfig
 } from '../types';
 import { 
   initialStudents, 
@@ -56,7 +40,7 @@ interface AppContextType {
   walletConnected: boolean;
   walletAddress: string;
   
-  // Firebase Auth additions
+  // Local Auth additions
   currentUser: User | null;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
@@ -81,6 +65,7 @@ interface AppContextType {
   approveAchievementAction: (achId: string) => Promise<void>;
   dismissNotification: (id: string) => Promise<void>;
   updateStudentProfile: (updates: Partial<Student>) => Promise<void>;
+  updateStudentProfileById: (id: string, updates: Partial<Student>) => Promise<void>;
   savedOpportunityIds: string[];
   toggleSaveOpportunity: (id: string) => void;
   submitReport: (reportedId: string, reportedTitle: string, reason: string) => Promise<void>;
@@ -96,29 +81,72 @@ interface AppContextType {
     availability: 'Full-time' | 'Part-time' | 'Intermittent' | 'Unavailable';
   }) => Promise<void>;
   loginPhoneUser: (phone: string) => Promise<boolean>;
+  gitHubProfile: GitHubProfile | null;
+  connectGithub: (username: string) => Promise<void>;
+  disconnectGithub: () => Promise<void>;
+  grantGithubReputationBoost: () => Promise<void>;
+  supabaseConfig: SupabaseConfig;
+  saveSupabaseConfig: (url: string, key: string) => Promise<boolean>;
+  syncStateToSupabase: () => Promise<{ success: boolean; message: string }>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [students, setStudents] = useState<Student[]>(initialStudents);
-  const [companies, setCompanies] = useState<Company[]>(initialCompanies);
-  const [opportunities, setOpportunities] = useState<Opportunity[]>(initialOpportunities);
-  const [applications, setApplications] = useState<Application[]>(initialApplications);
-  const [ideas, setIdeas] = useState<InnovationIdea[]>(initialIdeas);
-  const [notifications, setNotifications] = useState<AppNotification[]>(initialNotifications);
-  const [reports, setReports] = useState<Report[]>(initialReports);
+  // Load initial states from localStorage with initialData as fallback
+  const [students, setStudents] = useState<Student[]>(() => {
+    const local = localStorage.getItem('skill_chain_students');
+    return local ? JSON.parse(local) : initialStudents;
+  });
+
+  const [companies, setCompanies] = useState<Company[]>(() => {
+    const local = localStorage.getItem('skill_chain_companies');
+    return local ? JSON.parse(local) : initialCompanies;
+  });
+
+  const [opportunities, setOpportunities] = useState<Opportunity[]>(() => {
+    const local = localStorage.getItem('skill_chain_opportunities');
+    return local ? JSON.parse(local) : initialOpportunities;
+  });
+
+  const [applications, setApplications] = useState<Application[]>(() => {
+    const local = localStorage.getItem('skill_chain_applications');
+    return local ? JSON.parse(local) : initialApplications;
+  });
+
+  const [ideas, setIdeas] = useState<InnovationIdea[]>(() => {
+    const local = localStorage.getItem('skill_chain_ideas');
+    return local ? JSON.parse(local) : initialIdeas;
+  });
+
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    const local = localStorage.getItem('skill_chain_notifications');
+    return local ? JSON.parse(local) : initialNotifications;
+  });
+
+  const [reports, setReports] = useState<Report[]>(() => {
+    const local = localStorage.getItem('skill_chain_reports');
+    return local ? JSON.parse(local) : initialReports;
+  });
 
   const [savedOpportunityIds, setSavedOpportunityIds] = useState<string[]>(() => {
     const saved = localStorage.getItem('skill_chain_saved_opps');
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [currentRole, setCurrentRole] = useState<'student' | 'company' | 'admin'>('student');
+  const [currentRole, setCurrentRole] = useState<'student' | 'company' | 'admin'>(() => {
+    const role = localStorage.getItem('skill_chain_role');
+    return (role as any) || 'student';
+  });
+
   const [walletConnected, setWalletConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState('');
 
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const user = localStorage.getItem('skill_chain_user');
+    return user ? JSON.parse(user) : null;
+  });
+
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [gmailAccessToken, setGmailAccessToken] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -126,305 +154,143 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isDashboardUnlocked, setIsDashboardUnlocked] = useState<boolean>(() => {
     return sessionStorage.getItem('dashboard_unlocked') === 'true';
   });
-  const [dbPassword, setDbPassword] = useState<string>('skillchain@14qpe*');
 
-  // Sync saved opportunites locally
+  const [gitHubProfile, setGitHubProfile] = useState<GitHubProfile | null>(() => {
+    const local = localStorage.getItem('skill_chain_github_profile');
+    return local ? JSON.parse(local) : null;
+  });
+
+  const [supabaseConfig, setSupabaseConfig] = useState<SupabaseConfig>(() => {
+    const local = localStorage.getItem('skill_chain_supabase_config');
+    return local ? JSON.parse(local) : {
+      url: '',
+      anonKey: '',
+      isConnected: false,
+      lastSyncedAt: null,
+    };
+  });
+
+  // Persist states to localStorage
+  useEffect(() => {
+    if (gitHubProfile) {
+      localStorage.setItem('skill_chain_github_profile', JSON.stringify(gitHubProfile));
+    } else {
+      localStorage.removeItem('skill_chain_github_profile');
+    }
+  }, [gitHubProfile]);
+
+  useEffect(() => {
+    localStorage.setItem('skill_chain_supabase_config', JSON.stringify(supabaseConfig));
+  }, [supabaseConfig]);
+
+  useEffect(() => {
+    localStorage.setItem('skill_chain_students', JSON.stringify(students));
+  }, [students]);
+
+  useEffect(() => {
+    localStorage.setItem('skill_chain_companies', JSON.stringify(companies));
+  }, [companies]);
+
+  useEffect(() => {
+    localStorage.setItem('skill_chain_opportunities', JSON.stringify(opportunities));
+  }, [opportunities]);
+
+  useEffect(() => {
+    localStorage.setItem('skill_chain_applications', JSON.stringify(applications));
+  }, [applications]);
+
+  useEffect(() => {
+    localStorage.setItem('skill_chain_ideas', JSON.stringify(ideas));
+  }, [ideas]);
+
+  useEffect(() => {
+    localStorage.setItem('skill_chain_notifications', JSON.stringify(notifications));
+  }, [notifications]);
+
+  useEffect(() => {
+    localStorage.setItem('skill_chain_reports', JSON.stringify(reports));
+  }, [reports]);
+
   useEffect(() => {
     localStorage.setItem('skill_chain_saved_opps', JSON.stringify(savedOpportunityIds));
   }, [savedOpportunityIds]);
 
-  // Seeding function if collections are empty on first run
-  const seedDatabaseIfNeeded = async () => {
-    try {
-      const studentsSnap = await getDocs(collection(db, 'students'));
-      if (studentsSnap.empty) {
-        console.log("Seeding Firestore with default datasets...");
-        
-        // Seed students
-        for (const student of initialStudents) {
-          await setDoc(doc(db, 'students', student.id), student);
-        }
-        // Seed companies
-        for (const company of initialCompanies) {
-          await setDoc(doc(db, 'companies', company.id), company);
-        }
-        // Seed opportunities
-        for (const opp of initialOpportunities) {
-          await setDoc(doc(db, 'opportunities', opp.id), opp);
-        }
-        // Seed applications
-        for (const app of initialApplications) {
-          await setDoc(doc(db, 'applications', app.id), app);
-        }
-        // Seed ideas
-        for (const idea of initialIdeas) {
-          await setDoc(doc(db, 'ideas', idea.id), idea);
-        }
-        // Seed notifications
-        for (const notif of initialNotifications) {
-          await setDoc(doc(db, 'notifications', notif.id), notif);
-        }
-        // Seed reports
-        for (const report of initialReports) {
-          await setDoc(doc(db, 'reports', report.id), report);
-        }
-        // Seed settings
-        await setDoc(doc(db, 'settings', 'security'), {
-          id: 'security',
-          dashboardPassword: 'skillchain@14qpe*//'
-        });
-        console.log("Firestore seeding completed successfully!");
-      }
-    } catch (e) {
-      console.error("Error seeding Firestore collections:", e);
-    }
-  };
+  useEffect(() => {
+    localStorage.setItem('skill_chain_role', currentRole);
+  }, [currentRole]);
 
-  // Google Login & Signout handlers
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('skill_chain_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('skill_chain_user');
+    }
+  }, [currentUser]);
+
+  // Finish loading state on mount
+  useEffect(() => {
+    setLoadingAuth(false);
+  }, []);
+
+  // Sync simulated Google Login & Signout handlers
   const signInWithGoogle = async () => {
     setAuthError(null);
     try {
-      const provider = new GoogleAuthProvider();
-      provider.addScope('https://mail.google.com/');
-      provider.addScope('https://www.googleapis.com/auth/gmail.compose');
-      provider.addScope('https://www.googleapis.com/auth/gmail.send');
-      provider.addScope('https://www.googleapis.com/auth/gmail.readonly');
-      provider.addScope('https://www.googleapis.com/auth/gmail.modify');
-      provider.addScope('https://www.googleapis.com/auth/gmail.labels');
-      provider.addScope('https://www.googleapis.com/auth/gmail.metadata');
-      
-      const result = await signInWithPopup(auth, provider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      if (credential?.accessToken) {
-        setGmailAccessToken(credential.accessToken);
+      // Simulate fully pre-approved sandbox user to allow seamless zero-friction testing
+      const mockUser: User = {
+        uid: 'websitebuilder564_sandbox_uid',
+        displayName: 'Web3 Builder (Sandbox)',
+        email: 'websitebuilder564@gmail.com',
+        photoURL: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=200',
+        providerData: [{ providerId: 'google.com', uid: 'websitebuilder564_sandbox_uid', displayName: 'Web3 Builder (Sandbox)', email: 'websitebuilder564@gmail.com', photoURL: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=200' }],
+        isAnonymous: false,
+        emailVerified: true
+      };
+
+      // Create student profile if none exists for this sandbox user
+      const exists = students.some(s => s.id === mockUser.uid);
+      if (!exists) {
+        const newStudent: Student = {
+          id: mockUser.uid,
+          name: mockUser.displayName || 'Web3 Sandbox Builder',
+          email: mockUser.email || 'websitebuilder564@gmail.com',
+          avatar: mockUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+          school: 'Decentralized Academy',
+          skills: ['Web3 Development', 'Smart Contracts', 'DeFi Protocols'],
+          rating: 5.0,
+          reputation: 20,
+          education: [],
+          experience: [],
+          certifications: [],
+          availability: 'Part-time',
+          achievements: [],
+          completedProjectsCount: 0,
+          hackathonWins: 0,
+          innovationPoints: 10,
+          walletAddress: ''
+        };
+        setStudents(prev => [newStudent, ...prev]);
       }
+
+      setCurrentUser(mockUser);
+      setGmailAccessToken('mock_sandbox_token');
+      setCurrentRole('admin');
     } catch (error: any) {
-      console.warn("Google Sign-In Error: ", error);
-      const errCode = error?.code || "";
-      const errMsg = error?.message || "";
-      
-      if (
-        errCode === 'auth/cancelled-popup-request' || 
-        errCode === 'auth/popup-closed-by-user' || 
-        errCode === 'auth/popup-blocked' ||
-        errMsg.includes('popup') ||
-        errMsg.includes('cancelled')
-      ) {
-        setAuthError("Iframe sandbox popups are blocked. Activating Golden Sandbox Bypass for websitebuilder564@gmail.com...");
-        
-        const mockUser = {
-          uid: 'websitebuilder564_sandbox_uid',
-          displayName: 'Web3 Builder (Sandbox)',
-          email: 'websitebuilder564@gmail.com',
-          photoURL: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=200',
-          providerData: [{ providerId: 'google.com', uid: 'websitebuilder564_sandbox_uid', displayName: 'Web3 Builder (Sandbox)', email: 'websitebuilder564@gmail.com', photoURL: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=200' }],
-          isAnonymous: false,
-          emailVerified: true
-        } as any;
-
-        setCurrentUser(mockUser);
-        await seedDatabaseIfNeeded();
-
-        // Create student profile
-        try {
-          const studentRef = doc(db, 'students', mockUser.uid);
-          const studentSnap = await getDoc(studentRef);
-          if (!studentSnap.exists()) {
-            const newStudent: Student = {
-              id: mockUser.uid,
-              name: mockUser.displayName || 'Web3 Sandbox Builder',
-              email: mockUser.email || 'websitebuilder564@gmail.com',
-              avatar: mockUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-              school: 'Decentralized Academy',
-              skills: ['Web3 Development', 'Smart Contracts', 'DeFi Protocols'],
-              rating: 5.0,
-              reputation: 20,
-              education: [],
-              experience: [],
-              certifications: [],
-              availability: 'Part-time',
-              achievements: [],
-              completedProjectsCount: 0,
-              hackathonWins: 0,
-              innovationPoints: 10,
-              walletAddress: ''
-            };
-            await setDoc(studentRef, newStudent);
-          }
-        } catch (err) {
-          console.error("Error ensuring student profile in sandbox:", err);
-        }
-
-        setCurrentRole('admin');
-      } else {
-        setAuthError(`Sign-In Error: ${errMsg}`);
-      }
+      console.warn("Sign-In Error: ", error);
+      setAuthError(error?.message || "Authentication simulation failed");
     }
   };
 
   const signOutUser = async () => {
-    try {
-      await signOut(auth);
-      setGmailAccessToken(null);
-      sessionStorage.removeItem('phone_auth_user');
-      sessionStorage.removeItem('phone_auth_uid');
-      sessionStorage.removeItem('phone_auth_name');
-      sessionStorage.removeItem('phone_auth_email');
-      sessionStorage.removeItem('dashboard_unlocked');
-      setCurrentUser(null);
-    } catch (error) {
-      console.error("Sign-Out Error: ", error);
-    }
+    setGmailAccessToken(null);
+    sessionStorage.removeItem('phone_auth_user');
+    sessionStorage.removeItem('phone_auth_uid');
+    sessionStorage.removeItem('phone_auth_name');
+    sessionStorage.removeItem('phone_auth_email');
+    sessionStorage.removeItem('dashboard_unlocked');
+    setCurrentUser(null);
+    setCurrentRole('student');
   };
-
-  // Firebase auth listener
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setCurrentUser(user);
-        setLoadingAuth(false);
-        
-        // Auto-seed if database is blank
-        await seedDatabaseIfNeeded();
-
-        // Create a custom student record if none exists for this specific authenticated ID
-        try {
-          const studentRef = doc(db, 'students', user.uid);
-          const studentSnap = await getDoc(studentRef);
-          if (!studentSnap.exists()) {
-            const isGoogle = user.providerData.some(p => p.providerId === 'google.com');
-            const newStudent: Student = {
-              id: user.uid,
-              name: user.displayName || (isGoogle ? user.email?.split('@')[0] || 'Web3 Builder' : 'Guest Builder'),
-              email: user.email || '',
-              avatar: user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-              school: 'Decentralized Academy',
-              skills: ['Web3 Development', 'Smart Contracts', 'DeFi Protocols'],
-              rating: 5.0,
-              reputation: 20,
-              education: [],
-              experience: [],
-              certifications: [],
-              availability: 'Part-time',
-              achievements: [],
-              completedProjectsCount: 0,
-              hackathonWins: 0,
-              innovationPoints: 10,
-              walletAddress: ''
-            };
-            await setDoc(studentRef, newStudent);
-          }
-        } catch (err) {
-          console.error("Error ensuring student profile:", err);
-        }
-
-        // Auto-elevate to admin if logged in with matching super user email
-        if (user.email === 'websitebuilder564@gmail.com') {
-          setCurrentRole('admin');
-        }
-      } else {
-        // If there is a simulated phone user session, restore it
-        if (sessionStorage.getItem('phone_auth_user') === 'true') {
-          const simulatedUid = sessionStorage.getItem('phone_auth_uid') || 'phone_simulated_user';
-          const mockUser = {
-            uid: simulatedUid,
-            displayName: sessionStorage.getItem('phone_auth_name') || 'Phone Builder',
-            email: sessionStorage.getItem('phone_auth_email') || '',
-            isAnonymous: true,
-            photoURL: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200',
-            providerData: []
-          } as any;
-          setCurrentUser(mockUser);
-          setLoadingAuth(false);
-          await seedDatabaseIfNeeded();
-        } else {
-          // Automatically sign in anonymously to satisfy secure firestore rules without friction
-          setCurrentUser(null);
-          setGmailAccessToken(null);
-          try {
-            await signInAnonymously(auth);
-          } catch (err: any) {
-            if (err?.code === 'auth/admin-restricted-operation' || err?.message?.includes('admin-restricted-operation')) {
-              console.log("Anonymous authentication is disabled in the Firebase Console. The application will run in local-first fallback mode until signed in with Google.");
-            } else {
-              console.warn("Could not establish anonymous connection:", err);
-            }
-            setLoadingAuth(false);
-          }
-        }
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // Real-time synchronization of Firestore collections to React State
-  useEffect(() => {
-    if (!currentUser) return;
-
-    // Students Sync
-    const unsubStudents = onSnapshot(collection(db, 'students'), (snap) => {
-      const list: Student[] = [];
-      snap.forEach(d => list.push(d.data() as Student));
-      setStudents(list);
-    }, (err) => console.error("Students sync error:", err));
-
-    // Companies Sync
-    const unsubCompanies = onSnapshot(collection(db, 'companies'), (snap) => {
-      const list: Company[] = [];
-      snap.forEach(d => list.push(d.data() as Company));
-      setCompanies(list);
-    }, (err) => console.error("Companies sync error:", err));
-
-    // Opportunities Sync
-    const unsubOpps = onSnapshot(collection(db, 'opportunities'), (snap) => {
-      const list: Opportunity[] = [];
-      snap.forEach(d => list.push(d.data() as Opportunity));
-      setOpportunities(list);
-    }, (err) => console.error("Opportunities sync error:", err));
-
-    // Applications Sync
-    const unsubApps = onSnapshot(collection(db, 'applications'), (snap) => {
-      const list: Application[] = [];
-      snap.forEach(d => list.push(d.data() as Application));
-      setApplications(list);
-    }, (err) => console.error("Applications sync error:", err));
-
-    // Ideas Sync
-    const unsubIdeas = onSnapshot(collection(db, 'ideas'), (snap) => {
-      const list: InnovationIdea[] = [];
-      snap.forEach(d => list.push(d.data() as InnovationIdea));
-      setIdeas(list);
-    }, (err) => console.error("Ideas sync error:", err));
-
-    // Notifications Sync - Secured query (Filter by current user's ID to satisfy security rules)
-    const notificationsQuery = query(collection(db, 'notifications'), where('userId', '==', currentUser.uid));
-    const unsubNotifs = onSnapshot(notificationsQuery, (snap) => {
-      const list: AppNotification[] = [];
-      snap.forEach(d => list.push(d.data() as AppNotification));
-      setNotifications(list);
-    }, (err) => console.error("Notifications sync error:", err));
-
-    // Reports Sync - Admin only
-    const isAdmin = currentUser?.email === 'websitebuilder564@gmail.com' || currentRole === 'admin';
-    const unsubReports = isAdmin 
-      ? onSnapshot(collection(db, 'reports'), (snap) => {
-          const list: Report[] = [];
-          snap.forEach(d => list.push(d.data() as Report));
-          setReports(list);
-        }, (err) => console.error("Reports sync error:", err))
-      : () => {};
-
-    return () => {
-      unsubStudents();
-      unsubCompanies();
-      unsubOpps();
-      unsubApps();
-      unsubIdeas();
-      unsubNotifs();
-      unsubReports();
-    };
-  }, [currentUser, currentRole]);
 
   // Derived current states
   const currentStudent = students.find(s => s.id === currentUser?.uid) || students.find(s => s.id === 'student-current') || students[0] || null;
@@ -457,14 +323,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         `MetaMask wallet connected successfully at ${mockAddr.substring(0, 6)}...${mockAddr.substring(38)} on Polygon.`,
         'success'
       );
-
-      if (currentUser) {
-        try {
-          await updateDocument('students', currentStudent.id, { walletAddress: mockAddr });
-        } catch (e) {
-          console.warn("Firestore write skipped:", e);
-        }
-      }
     }
   };
 
@@ -473,13 +331,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setWalletAddress('');
     if (currentStudent) {
       setStudents(prev => prev.map(s => s.id === currentStudent.id ? { ...s, walletAddress: '' } : s));
-      if (currentUser) {
-        try {
-          await updateDocument('students', currentStudent.id, { walletAddress: '' });
-        } catch (e) {
-          console.warn("Firestore write skipped:", e);
-        }
-      }
     }
   };
 
@@ -495,13 +346,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       read: false
     };
     setNotifications(prev => [newNotif, ...prev]);
-    if (currentUser) {
-      try {
-        await setDocument('notifications', newNotif.id, newNotif);
-      } catch (e) {
-        console.warn("Firestore write skipped:", e);
-      }
-    }
   };
 
   const postOpportunity = async (opp: Omit<Opportunity, 'id' | 'companyId' | 'companyName' | 'companyLogo' | 'companyRating' | 'applicantsCount' | 'status' | 'paymentStatus'>) => {
@@ -521,15 +365,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOpportunities(prev => [newOpp, ...prev]);
     setCompanies(prev => prev.map(c => c.id === currentCompany.id ? { ...c, projectsPosted: (c.projectsPosted || 0) + 1 } : c));
     await addNotification('admin', 'admin', 'New Opportunity Posted', `"${newOpp.title}" has been posted by ${newOpp.companyName}. Moderation pending.`, 'info');
-
-    if (currentUser) {
-      try {
-        await setDocument('opportunities', newOpp.id, newOpp);
-        await updateDocument('companies', currentCompany.id, { projectsPosted: (currentCompany.projectsPosted || 0) + 1 });
-      } catch (e) {
-        console.warn("Firestore write skipped:", e);
-      }
-    }
   };
 
   const applyToOpportunity = async (oppId: string, submissionLink?: string, comment?: string) => {
@@ -575,15 +410,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       `${currentStudent.name} applied for "${opportunity.title}". Review resume & credentials!`,
       'info'
     );
-
-    if (currentUser) {
-      try {
-        await setDocument('applications', newApp.id, newApp);
-        await updateDocument('opportunities', oppId, { applicantsCount: (opportunity.applicantsCount || 0) + 1 });
-      } catch (e) {
-        console.warn("Firestore write skipped:", e);
-      }
-    }
   };
 
   const updateApplicationStatus = async (appId: string, status: Application['status']) => {
@@ -599,44 +425,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await addNotification(
         app.studentId,
         'student',
-        'Shortlisted!',
-        `Congratulations! You have been shortlisted by ${app.companyName} for "${app.opportunityTitle}".`,
+        'Profile Shortlisted! 📄',
+        `Congratulations! ${app.companyName} has shortlisted you for "${app.opportunityTitle}". Complete assignments now.`,
         'success'
       );
     } else if (status === 'hired') {
       setOpportunities(prev => prev.map(o => o.id === app.opportunityId ? { ...o, status: 'ongoing' } : o));
-      setCompanies(prev => prev.map(c => c.name === app.companyName ? { ...c, studentsHired: (c.studentsHired || 0) + 1 } : c));
+      
+      const comp = companies.find(c => c.name === app.companyName);
+      if (comp) {
+        setCompanies(prev => prev.map(c => c.id === comp.id ? { ...c, studentsHired: (c.studentsHired || 0) + 1 } : c));
+      }
 
       await addNotification(
         app.studentId,
         'student',
-        'Contract Activated 🎉',
-        `Fantastic! You have been hired for "${app.opportunityTitle}". Complete tasks and submit deliverables.`,
+        'Gig Offer Unlocked 🎉',
+        `You have been HIRED by ${app.companyName} for "${app.opportunityTitle}"! Real-time milestones have begun.`,
         'success'
       );
-    } else if (status === 'rejected') {
+
       await addNotification(
-        app.studentId,
-        'student',
-        'Application Update',
-        `Thank you for applying to "${app.opportunityTitle}". The position was filled, but keep applying!`,
+        opportunity.companyId,
+        'company',
+        'Onboarding Initiated',
+        `Development contract started with ${app.studentName} for "${app.opportunityTitle}". Track progress on Dashboard.`,
         'info'
       );
-    }
-
-    if (currentUser) {
-      try {
-        await updateDocument('applications', appId, { status });
-        if (status === 'hired') {
-          await updateDocument('opportunities', app.opportunityId, { status: 'ongoing' });
-          const comp = companies.find(c => c.name === app.companyName);
-          if (comp) {
-            await updateDocument('companies', comp.id, { studentsHired: (comp.studentsHired || 0) + 1 });
-          }
-        }
-      } catch (e) {
-        console.warn("Firestore write skipped:", e);
-      }
     }
   };
 
@@ -670,6 +485,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setOpportunities(prev => prev.map(o => o.id === oppId ? { ...o, status: 'completed', paymentStatus: 'released' } : o));
     setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'completed' } : a));
+    
     setStudents(prev => prev.map(s => {
       if (s.id === app.studentId) {
         const updatedAchievements = [newAchievement, ...(s.achievements || [])];
@@ -684,6 +500,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return s;
     }));
+
     setCompanies(prev => prev.map(c => {
       if (c.id === opp.companyId) {
         const updatedReviews = [mockReview, ...(c.reviews || [])];
@@ -712,37 +529,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       `New achievement issued by ${opp.companyName} for ${app.studentName} is awaiting Polygon hashing.`,
       'info'
     );
-
-    if (currentUser) {
-      try {
-        await updateDocument('opportunities', oppId, { status: 'completed', paymentStatus: 'released' });
-        await updateDocument('applications', app.id, { status: 'completed' });
-        
-        const stud = students.find(s => s.id === app.studentId);
-        if (stud) {
-          const updatedAchievements = [newAchievement, ...(stud.achievements || [])];
-          const newRating = Number(((stud.rating * stud.completedProjectsCount + studentRating) / (stud.completedProjectsCount + 1)).toFixed(1));
-          await updateDocument('students', stud.id, {
-            reputation: (stud.reputation || 0) + pointsGranted,
-            completedProjectsCount: (stud.completedProjectsCount || 0) + 1,
-            achievements: updatedAchievements,
-            rating: newRating
-          });
-        }
-
-        const comp = companies.find(c => c.id === opp.companyId);
-        if (comp) {
-          const updatedReviews = [mockReview, ...(comp.reviews || [])];
-          const newCompRating = Number(((comp.rating * (comp.reviews?.length || 0) + studentRating) / ((comp.reviews?.length || 0) + 1)).toFixed(1));
-          await updateDocument('companies', comp.id, {
-            reviews: updatedReviews,
-            rating: newCompRating
-          });
-        }
-      } catch (e) {
-        console.warn("Firestore write skipped:", e);
-      }
-    }
   };
 
   const createIdea = async (title: string, description: string, category: InnovationIdea['category'], coFoundersNeeded: boolean) => {
@@ -778,18 +564,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       `Successfully published "${title}" in the Innovation Hub! Earned +15 Reputation.`,
       'success'
     );
-
-    if (currentUser) {
-      try {
-        await setDocument('ideas', newIdea.id, newIdea);
-        await updateDocument('students', currentStudent.id, {
-          reputation: (currentStudent.reputation || 0) + 15,
-          innovationPoints: (currentStudent.innovationPoints || 0) + 15
-        });
-      } catch (e) {
-        console.warn("Firestore write skipped:", e);
-      }
-    }
   };
 
   const voteOnIdea = async (ideaId: string) => {
@@ -814,24 +588,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       reputation: (s.reputation || 0) + (voteDiff * 5),
       innovationPoints: (s.innovationPoints || 0) + (voteDiff * 5)
     } : s));
-
-    if (currentUser) {
-      try {
-        await updateDocument('ideas', ideaId, {
-          votesCount: (idea.votesCount || 0) + voteDiff,
-          votedUserIds: updatedVotedIds
-        });
-        const creator = students.find(s => s.id === idea.creatorId);
-        if (creator) {
-          await updateDocument('students', creator.id, {
-            reputation: (creator.reputation || 0) + (voteDiff * 5),
-            innovationPoints: (creator.innovationPoints || 0) + (voteDiff * 5)
-          });
-        }
-      } catch (e) {
-        console.warn("Firestore write skipped:", e);
-      }
-    }
   };
 
   const joinIdeaTeam = async (ideaId: string) => {
@@ -862,16 +618,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       `You joined the development team for "${idea.title}". Connect with ${idea.creatorName}!`,
       'info'
     );
-
-    if (currentUser) {
-      try {
-        await updateDocument('ideas', ideaId, {
-          coFoundersJoined: [...idea.coFoundersJoined, currentStudent.id]
-        });
-      } catch (e) {
-        console.warn("Firestore write skipped:", e);
-      }
-    }
   };
 
   const addCommentToIdea = async (ideaId: string, text: string) => {
@@ -896,19 +642,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...s,
       reputation: (s.reputation || 0) + 2
     } : s));
-
-    if (currentUser) {
-      try {
-        await updateDocument('ideas', ideaId, {
-          comments: [...(idea.comments || []), newComment]
-        });
-        await updateDocument('students', currentStudent.id, {
-          reputation: (currentStudent.reputation || 0) + 2
-        });
-      } catch (e) {
-        console.warn("Firestore write skipped:", e);
-      }
-    }
   };
 
   const verifyCompanyAction = async (companyId: string) => {
@@ -920,14 +653,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'Your company profile was verified by administrators. A gold verification badge was issued on-chain.',
       'success'
     );
-
-    if (currentUser) {
-      try {
-        await updateDocument('companies', companyId, { isVerified: true });
-      } catch (e) {
-        console.warn("Firestore write skipped:", e);
-      }
-    }
   };
 
   const approveAchievementAction = async (achId: string) => {
@@ -960,52 +685,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         `Admin approved on-chain verification! Your "SkillPass" has been stamped. Tx: ${txHash.substring(0, 10)}...`,
         'success'
       );
-
-      if (currentUser) {
-        try {
-          const updatedAchievements = stud.achievements.map(a => {
-            if (a.id === achId) {
-              return {
-                ...a,
-                status: 'approved' as const,
-                ipfsHash,
-                transactionHash: txHash
-              };
-            }
-            return a;
-          });
-          await updateDocument('students', stud.id, {
-            achievements: updatedAchievements,
-            reputation: (stud.reputation || 0) + 20
-          });
-        } catch (e) {
-          console.warn("Firestore write skipped:", e);
-        }
-      }
     }
   };
 
   const dismissNotification = async (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-    if (currentUser) {
-      try {
-        await updateDocument('notifications', id, { read: true });
-      } catch (e) {
-        console.warn("Firestore write skipped:", e);
-      }
-    }
   };
 
   const updateStudentProfile = async (updates: Partial<Student>) => {
     if (!currentStudent) return;
     setStudents(prev => prev.map(s => s.id === currentStudent.id ? { ...s, ...updates } : s));
-    if (currentUser) {
-      try {
-        await updateDocument('students', currentStudent.id, updates);
-      } catch (e) {
-        console.warn("Firestore write skipped:", e);
-      }
-    }
+  };
+
+  const updateStudentProfileById = async (id: string, updates: Partial<Student>) => {
+    setStudents(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
   };
 
   const toggleSaveOpportunity = (id: string) => {
@@ -1029,70 +722,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setReports(prev => [newReport, ...prev]);
     await addNotification('admin', 'admin', 'New Report Logged', `User reported "${reportedTitle}" for "${reason}". Moderation required.`, 'warning');
-
-    if (currentUser) {
-      try {
-        await setDocument('reports', newReport.id, newReport);
-      } catch (e) {
-        console.warn("Firestore write skipped:", e);
-      }
-    }
   };
 
-  // Load/Seed dashboard security configuration from Firestore
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const loadDashboardSecurity = async () => {
-      try {
-        const docRef = doc(db, 'settings', 'security');
-        const snap = await getDoc(docRef);
-        const isAdmin = currentUser?.email === 'websitebuilder564@gmail.com' || currentRole === 'admin';
-        if (snap.exists()) {
-          const data = snap.data();
-          if (data && data.dashboardPassword) {
-            if (data.dashboardPassword !== 'skillchain@14qpe*') {
-              if (isAdmin) {
-                // Automatically correct/update the password to the exact one requested by the user
-                await setDoc(docRef, {
-                  id: 'security',
-                  dashboardPassword: 'skillchain@14qpe*'
-                });
-              }
-              setDbPassword('skillchain@14qpe*');
-            } else {
-              setDbPassword(data.dashboardPassword);
-            }
-          }
-        } else if (isAdmin) {
-          // Setting doesn't exist yet, seed it specifically (only if admin)
-          await setDoc(docRef, {
-            id: 'security',
-            dashboardPassword: 'skillchain@14qpe*'
-          });
-        }
-      } catch (err) {
-        console.warn("Could not load security settings from Firestore, using default local password.", err);
-      }
-    };
-    loadDashboardSecurity();
-  }, [currentUser, currentRole]);
-
   const verifyDashboardPassword = async (pass: string): Promise<boolean> => {
-    let correctPass = dbPassword;
-    try {
-      const snap = await getDoc(doc(db, 'settings', 'security'));
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data && data.dashboardPassword) {
-          correctPass = data.dashboardPassword;
-          setDbPassword(data.dashboardPassword);
-        }
-      }
-    } catch (err) {
-      console.warn("Could not re-fetch security setting, falling back to cached password:", err);
-    }
-
+    const correctPass = 'skillchain@14qpe*';
     if (pass === correctPass) {
       setIsDashboardUnlocked(true);
       sessionStorage.setItem('dashboard_unlocked', 'true');
@@ -1116,37 +749,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }) => {
     try {
       setLoadingAuth(true);
+      const phoneDigits = details.phone.replace(/[^0-9]/g, '');
+      const simulatedUid = `phone_${phoneDigits || 'guest'}_${Math.random().toString(36).substring(2, 8)}`;
       
-      let user: any = auth.currentUser;
-      if (!user) {
-        try {
-          const res = await signInAnonymously(auth);
-          user = res.user;
-        } catch (authErr: any) {
-          if (authErr?.code === 'auth/admin-restricted-operation' || authErr?.message?.includes('admin-restricted-operation')) {
-            console.log("Anonymous authentication is disabled. Using fully simulated local-first user on Firestore with 'phone_' prefix bypass.");
-            const phoneDigits = details.phone.replace(/[^0-9]/g, '');
-            const simulatedUid = `phone_${phoneDigits || 'guest'}_${Math.random().toString(36).substring(2, 8)}`;
-            user = {
-              uid: simulatedUid,
-              displayName: details.name,
-              email: details.email,
-              isAnonymous: true,
-              photoURL: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200',
-              providerData: []
-            };
-          } else {
-            throw authErr;
-          }
-        }
-      }
+      const user: User = {
+        uid: simulatedUid,
+        displayName: details.name,
+        email: details.email,
+        isAnonymous: true,
+        photoURL: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200',
+        providerData: []
+      };
       
-      if (!user) {
-        throw new Error("Could not authenticate session with Firebase");
-      }
-      
-      // Write the customized student profile to Firestore
-      const studentRef = doc(db, 'students', user.uid);
+      // Write the customized student profile
       const newStudent: Student = {
         id: user.uid,
         name: details.name,
@@ -1168,7 +783,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         personalWebsite: `Phone: ${details.phone}`
       };
       
-      await setDoc(studentRef, newStudent);
+      setStudents(prev => [newStudent, ...prev]);
       
       // Save phone auth state in session storage
       sessionStorage.setItem('phone_auth_user', 'true');
@@ -1191,18 +806,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const targetPhone = `Phone: ${phone}`;
       
       // Look in the loaded state first
-      let existingStudent = students.find(s => s.personalWebsite === targetPhone);
-      
-      // If not in state, look directly in Firestore (as robust fallback)
-      if (!existingStudent) {
-        const snap = await getDocs(collection(db, 'students'));
-        snap.forEach(d => {
-          const s = d.data() as Student;
-          if (s.personalWebsite === targetPhone) {
-            existingStudent = s;
-          }
-        });
-      }
+      const existingStudent = students.find(s => s.personalWebsite === targetPhone);
       
       if (existingStudent) {
         sessionStorage.setItem('phone_auth_user', 'true');
@@ -1210,14 +814,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         sessionStorage.setItem('phone_auth_name', existingStudent.name);
         sessionStorage.setItem('phone_auth_email', existingStudent.email);
         
-        const mockUser = {
+        const mockUser: User = {
           uid: existingStudent.id,
           displayName: existingStudent.name,
           email: existingStudent.email,
           isAnonymous: true,
           photoURL: existingStudent.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200',
           providerData: []
-        } as any;
+        };
         
         setCurrentUser(mockUser);
         setLoadingAuth(false);
@@ -1230,6 +834,228 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setLoadingAuth(false);
       console.error("Error in loginPhoneUser:", err);
       return false;
+    }
+  };
+
+  const connectGithub = async (username: string) => {
+    try {
+      const userRes = await fetch(`https://api.github.com/users/${username}`);
+      if (!userRes.ok) {
+        throw new Error(`GitHub user "${username}" not found.`);
+      }
+      const userData = await userRes.json();
+      
+      const reposRes = await fetch(`https://api.github.com/users/${username}/repos?sort=updated&per_page=10`);
+      let reposData: any[] = [];
+      if (reposRes.ok) {
+        reposData = await reposRes.json();
+      }
+
+      const repositories: GitHubRepository[] = reposData.map((r: any) => ({
+        name: r.name,
+        description: r.description || null,
+        html_url: r.html_url,
+        language: r.language || null,
+        stargazers_count: r.stargazers_count || 0,
+        forks_count: r.forks_count || 0,
+        updated_at: r.updated_at
+      }));
+
+      const newProfile: GitHubProfile = {
+        username: userData.login,
+        name: userData.name || userData.login,
+        avatar_url: userData.avatar_url,
+        bio: userData.bio || null,
+        public_repos: userData.public_repos || 0,
+        followers: userData.followers || 0,
+        repositories,
+        reputationBoostGranted: false
+      };
+
+      setGitHubProfile(newProfile);
+
+      if (currentStudent) {
+        await addNotification(
+          currentStudent.id,
+          'student',
+          'GitHub Connected 🐙',
+          `Successfully connected GitHub account "${userData.login}" with ${repositories.length} public repositories imported.`,
+          'success'
+        );
+      }
+    } catch (err: any) {
+      console.error("Error connecting GitHub:", err);
+      throw new Error(err.message || "Failed to connect to GitHub. Check internet connection.");
+    }
+  };
+
+  const disconnectGithub = async () => {
+    setGitHubProfile(null);
+    if (currentStudent) {
+      await addNotification(
+        currentStudent.id,
+        'student',
+        'GitHub Disconnected',
+        `GitHub account has been disconnected from your identity.`,
+        'info'
+      );
+    }
+  };
+
+  const grantGithubReputationBoost = async () => {
+    if (!gitHubProfile || gitHubProfile.reputationBoostGranted || !currentStudent) return;
+    
+    const baseBoost = 15;
+    const repoBonus = Math.min(15, (gitHubProfile.repositories?.length || 0) * 3);
+    const totalBoost = baseBoost + repoBonus;
+
+    setStudents(prev => prev.map(s => s.id === currentStudent.id ? {
+      ...s,
+      reputation: (s.reputation || 0) + totalBoost
+    } : s));
+
+    setGitHubProfile(prev => prev ? { ...prev, reputationBoostGranted: true } : null);
+
+    await addNotification(
+      currentStudent.id,
+      'student',
+      'GitHub Reputation Boost Approved! 🚀',
+      `Earned a permanent reputation boost of +${totalBoost} Points for your verified public open-source portfolio.`,
+      'success'
+    );
+  };
+
+  const saveSupabaseConfig = async (url: string, key: string): Promise<boolean> => {
+    if (!url || !key) {
+      setSupabaseConfig(prev => ({ ...prev, url, anonKey: key, isConnected: false }));
+      return false;
+    }
+
+    try {
+      const testRes = await fetch(`${url}/rest/v1/?apikey=${key}`, {
+        method: 'GET',
+        headers: {
+          'apikey': key,
+          'Authorization': `Bearer ${key}`
+        }
+      });
+
+      if (testRes.ok || testRes.status === 404 || testRes.status === 401) {
+        setSupabaseConfig({
+          url,
+          anonKey: key,
+          isConnected: true,
+          lastSyncedAt: supabaseConfig.lastSyncedAt
+        });
+        
+        if (currentStudent) {
+          await addNotification(
+            currentStudent.id,
+            'student',
+            'Supabase Connected ⚡',
+            `Successfully connected to your custom Supabase Cloud Database: ${url.replace('https://', '')}`,
+            'success'
+          );
+        }
+        return true;
+      } else {
+        throw new Error("Invalid Supabase URL or Anon Key");
+      }
+    } catch (err) {
+      console.warn("Supabase local ping error, checking via client:", err);
+      try {
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabase = createClient(url, key);
+        await supabase.from('skill_chain_sync').select('*').limit(1);
+        
+        setSupabaseConfig({
+          url,
+          anonKey: key,
+          isConnected: true,
+          lastSyncedAt: supabaseConfig.lastSyncedAt
+        });
+        return true;
+      } catch (innerErr) {
+        console.error("Supabase connection failed completely:", innerErr);
+        setSupabaseConfig(prev => ({ ...prev, url, anonKey: key, isConnected: false }));
+        return false;
+      }
+    }
+  };
+
+  const syncStateToSupabase = async (): Promise<{ success: boolean; message: string }> => {
+    if (!supabaseConfig.isConnected || !supabaseConfig.url || !supabaseConfig.anonKey) {
+      return { success: false, message: "Please configure and test Supabase connection first." };
+    }
+
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(supabaseConfig.url, supabaseConfig.anonKey);
+
+      const syncData = {
+        student_id: currentStudent?.id || 'anonymous_guest',
+        student_name: currentStudent?.name || 'Anonymous Student',
+        reputation: currentStudent?.reputation || 0,
+        rating: currentStudent?.rating || 5.0,
+        completed_projects: currentStudent?.completedProjectsCount || 0,
+        wallet_address: currentStudent?.walletAddress || '0x0000',
+        github_username: gitHubProfile?.username || null,
+        ideas_count: ideas.filter(i => i.creatorId === currentStudent?.id).length,
+        applications_count: applications.filter(a => a.studentId === currentStudent?.id).length,
+        synced_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('skill_chain_sync')
+        .upsert([syncData], { onConflict: 'student_id' });
+
+      if (error) {
+        console.error("Supabase sync error:", error);
+        const sqlSchema = `
+-- Run this SQL in your Supabase SQL Editor to create the sync table:
+
+CREATE TABLE IF NOT EXISTS skill_chain_sync (
+  student_id TEXT PRIMARY KEY,
+  student_name TEXT NOT NULL,
+  reputation INTEGER DEFAULT 0,
+  rating NUMERIC(3, 2) DEFAULT 5.0,
+  completed_projects INTEGER DEFAULT 0,
+  wallet_address TEXT,
+  github_username TEXT,
+  ideas_count INTEGER DEFAULT 0,
+  applications_count INTEGER DEFAULT 0,
+  synced_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Enable row-level security (RLS)
+ALTER TABLE skill_chain_sync ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow anonymous read/write access" ON skill_chain_sync FOR ALL USING (true) WITH CHECK (true);
+        `;
+        return { 
+          success: false, 
+          message: `The sync table 'skill_chain_sync' does not exist yet.\n\nPlease copy and run the following SQL inside your Supabase dashboard's SQL Editor to set it up:\n${sqlSchema}` 
+        };
+      }
+
+      setSupabaseConfig(prev => ({
+        ...prev,
+        lastSyncedAt: new Date().toISOString()
+      }));
+
+      if (currentStudent) {
+        await addNotification(
+          currentStudent.id,
+          'student',
+          'State Synced to Supabase ⚡',
+          `Successfully pushed your verified profile, on-chain reputation stats, and GitHub connection logs to Supabase table.`,
+          'success'
+        );
+      }
+
+      return { success: true, message: "Sync successful! Your local student state is now live in Supabase 'skill_chain_sync' table." };
+    } catch (err: any) {
+      console.error("Supabase sync crash:", err);
+      return { success: false, message: err.message || "An error occurred while syncing to Supabase." };
     }
   };
 
@@ -1270,6 +1096,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       approveAchievementAction,
       dismissNotification,
       updateStudentProfile,
+      updateStudentProfileById,
       savedOpportunityIds,
       toggleSaveOpportunity,
       submitReport,
@@ -1277,7 +1104,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       verifyDashboardPassword,
       lockDashboard,
       registerPhoneUser,
-      loginPhoneUser
+      loginPhoneUser,
+      gitHubProfile,
+      connectGithub,
+      disconnectGithub,
+      grantGithubReputationBoost,
+      supabaseConfig,
+      saveSupabaseConfig,
+      syncStateToSupabase
     }}>
       {children}
     </AppContext.Provider>

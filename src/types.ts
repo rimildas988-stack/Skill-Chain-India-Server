@@ -161,3 +161,42 @@ export interface Report {
   createdAt: string;
   status: 'pending' | 'resolved';
 }
+
+export interface User {
+  uid: string;
+  displayName: string | null;
+  email: string | null;
+  photoURL: string | null;
+  isAnonymous: boolean;
+  emailVerified?: boolean;
+  providerData?: any[];
+}
+
+export interface GitHubRepository {
+  name: string;
+  description: string | null;
+  html_url: string;
+  language: string | null;
+  stargazers_count: number;
+  forks_count: number;
+  updated_at: string;
+}
+
+export interface GitHubProfile {
+  username: string;
+  name: string | null;
+  avatar_url: string;
+  bio: string | null;
+  public_repos: number;
+  followers: number;
+  repositories: GitHubRepository[];
+  reputationBoostGranted: boolean;
+}
+
+export interface SupabaseConfig {
+  url: string;
+  anonKey: string;
+  isConnected: boolean;
+  lastSyncedAt: string | null;
+}
+

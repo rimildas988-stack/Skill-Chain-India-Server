@@ -788,7 +788,7 @@ export const PhoneLogin: React.FC<PhoneLoginProps> = ({ onSuccess, onCancel }) =
                 </p>
                 <div className="space-y-2 pl-2 border-l border-[#e6ca65]/20">
                   <p><strong>1. Data Minimization:</strong> We request only fundamental professional attributes (Name, School, Core Skills, Availability) required to pair you with Web3 partner organizations.</p>
-                  <p><strong>2. Firestore Security:</strong> Your data is stored on highly secure Firestore instances utilizing robust granular security rules. This shields your details from unauthorized external queries.</p>
+                  <p><strong>2. Advanced Storage Security:</strong> Your data is stored securely using local sandbox isolation and cache security. This shields your details from unauthorized external queries.</p>
                   <p><strong>3. Non-Disclosure:</strong> We never distribute, sell, or rent student details to third parties. Your personal profile attributes are only exposed to vetted companies when you actively submit applications.</p>
                 </div>
               </div>

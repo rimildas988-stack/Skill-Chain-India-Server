@@ -18,8 +18,6 @@ import {
   ExternalLink,
   Phone
 } from 'lucide-react';
-import { db } from '../firebase';
-import { collection, addDoc } from 'firebase/firestore';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -33,7 +31,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     opportunities,
     signOutUser, 
     currentUser,
-    updateStudentProfile
+    updateStudentProfile,
+    submitReport
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'history' | 'terms' | 'contact'>('history');
@@ -95,16 +94,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
 
     setSendingFeedback(true);
     try {
-      // Write feedback directly to Firestore reports/feedback collection
-      await addDoc(collection(db, 'reports'), {
-        reporterId: currentStudent?.id || 'anonymous_guest',
-        reporterName: currentStudent?.name || 'Anonymous Guest',
-        reportedId: 'system_feedback',
-        reportedTitle: 'System Help Feedback Form',
-        reason: `Profile Support Form: ${feedbackText.trim()}`,
-        status: 'pending',
-        createdAt: new Date().toISOString()
-      });
+      // Use standard context submitReport to handle feedback
+      await submitReport(
+        'system_feedback',
+        'System Help Feedback Form',
+        `Profile Support Form: ${feedbackText.trim()}`
+      );
 
       setSendingFeedback(false);
       setFeedbackSuccess(true);
@@ -368,7 +363,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
                 {feedbackSuccess && (
                   <p className="text-xs font-semibold text-emerald-400 flex items-center gap-1">
                     <Check className="w-4 h-4" />
-                    Feedback lodged in Firestore successfully!
+                    Feedback logged successfully!
                   </p>
                 )}
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { updateDocument } from '../lib/firestoreService';
+
 import { 
   Shield, 
   Users, 
@@ -39,7 +39,8 @@ export const AdminDashboard: React.FC = () => {
     currentUser,
     currentRole,
     signInWithGoogle,
-    signOutUser
+    signOutUser,
+    updateStudentProfileById
   } = useApp();
 
   const [activeSubTab, setActiveSubTab] = useState<'verification' | 'achievements' | 'leaderboard' | 'reports'>('verification');
@@ -744,7 +745,7 @@ export const AdminDashboard: React.FC = () => {
                       <button 
                         onClick={async () => {
                           const newRep = Math.max(0, (student.reputation || 0) - 10);
-                          await updateDocument('students', student.id, { reputation: newRep });
+                          await updateStudentProfileById(student.id, { reputation: newRep });
                           triggerToast(`Deducted 10 reputation from ${student.name}.`);
                         }}
                         className="p-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer"
@@ -756,7 +757,7 @@ export const AdminDashboard: React.FC = () => {
                       <button 
                         onClick={async () => {
                           const newRep = (student.reputation || 0) + 10;
-                          await updateDocument('students', student.id, { reputation: newRep });
+                          await updateStudentProfileById(student.id, { reputation: newRep });
                           triggerToast(`Granted 10 reputation to ${student.name}.`);
                         }}
                         className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer animate-pulse"
@@ -827,13 +828,13 @@ export const AdminDashboard: React.FC = () => {
                             ) : (
                               <button 
                                 onClick={async () => {
-                                  // Revocation mechanism! Update achievements list in Firestore
+                                  // Revocation mechanism! Update achievements list in local state
                                   const updatedAchievements = student.achievements!.map(a => 
                                     a.id === ach.id ? { ...a, status: 'pending' as const, transactionHash: undefined, ipfsHash: undefined } : a
                                   );
                                   // Deduct 20 points
                                   const newRep = Math.max(0, (student.reputation || 0) - 20);
-                                  await updateDocument('students', student.id, { 
+                                  await updateStudentProfileById(student.id, { 
                                     achievements: updatedAchievements,
                                     reputation: newRep
                                   });
